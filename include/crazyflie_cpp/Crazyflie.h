@@ -109,6 +109,11 @@ public:
 
   void logReset();
 
+  static void sendPacketNoAck(
+    int cf_id ,
+    const uint8_t* data,
+    uint32_t length);
+  
   void sendSetpoint(
     float roll,
     float pitch,
