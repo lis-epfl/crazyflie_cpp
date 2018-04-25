@@ -8,6 +8,7 @@
 #include "Crazyradio.h"
 #include "CrazyflieUSB.h"
 
+#include <iostream>
 #include <fstream>
 #include <cstring>
 #include <stdexcept>
@@ -117,12 +118,12 @@ void Crazyflie::sendPacketNoAck(int cf_id , const uint8_t* data, uint32_t length
   if (!g_crazyflieUSB[cf_id] && !g_crazyradios[cf_id]){
     throw std::runtime_error ("No such crazyflie ID ! Try again");
   }
-  if (!g_crazyflieUSB[cf_id]){
+  if (g_crazyflieUSB[cf_id]){
     std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[cf_id]);
     g_crazyflieUSB[cf_id]->sendPacketNoAck(data, length);
     return;
   }
-  if (!g_crazyradios[cf_id]){
+  if (g_crazyradios[cf_id]){
     std::unique_lock<std::mutex> mlock(g_radioMutex[cf_id]);
     g_crazyradios[cf_id]->sendPacketNoAck(data, length);
   }
