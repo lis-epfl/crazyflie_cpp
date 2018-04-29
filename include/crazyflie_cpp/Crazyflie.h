@@ -108,12 +108,12 @@ public:
     Logger& logger = EmptyLogger);
 
   void logReset();
-
-  static void sendPacketNoAck(
-    int cf_id ,
-    const uint8_t* data,
-    uint32_t length);
   
+  void sendPacket(
+    const uint8_t* data,
+    uint32_t length,
+    Crazyradio::Ack& result);
+
   void sendSetpoint(
     float roll,
     float pitch,
@@ -238,6 +238,16 @@ public:
     m_consoleCallback = cb;
   }
 
+  void setMotorsCallback(
+    std::function<void(const crtpMotorsDataResponse*)> cb){
+    m_motorsControlCallback = cb;
+  }
+
+  void setImuExpDataCallback(
+    std::function<void(const crtpImuExpDataResponse*)> cb){
+    m_imuExpDataResponseCallback = cb;
+  }
+
   static size_t size(LogType t) {
     switch(t) {
       case LogTypeUint8:
@@ -303,10 +313,6 @@ public:
     uint8_t groupMask = 0);
 
 private:
-  void sendPacket(
-    const uint8_t* data,
-    uint32_t length,
-    Crazyradio::Ack& result);
 
   bool sendPacket(
     const uint8_t* data,
@@ -434,6 +440,10 @@ private:
   std::vector<MemoryTocEntry> m_memoryTocEntries;
 
   std::function<void(const crtpPlatformRSSIAck*)> m_emptyAckCallback;
+
+  std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
+  std::function<void(const crtpImuExpDataResponse*)> m_imuExpDataResponseCallback;
+
   std::function<void(float)> m_linkQualityCallback;
   std::function<void(const char*)> m_consoleCallback;
 

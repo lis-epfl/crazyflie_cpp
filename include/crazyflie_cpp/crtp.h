@@ -850,6 +850,42 @@ struct crtpCommanderHighLevelDefineTrajectoryRequest
 } __attribute__((packed));
 CHECKSIZE(crtpCommanderHighLevelDefineTrajectoryRequest)
 
+// Port 9 SITL and HITL
+struct crtpMotorsDataResponse
+{
+    static bool match(const Crazyradio::Ack& response) {
+      return (response.size == 17) &&
+             crtp(response.data[0]) == crtp(0x09, 0);
+    }
+    const crtp header;
+    uint32_t m1;
+    uint32_t m2;
+    uint32_t m3;
+    uint32_t m4;
+} __attribute__((packed));
+CHECKSIZE_RESPONSE(crtpMotorsDataResponse)
+
+struct crtpImuExpDataResponse
+{
+  static bool match(const Crazyradio::Ack& response){
+    return (response.size == 31 &&
+              crtp(response.data[0]) == crtp(0x09, 0));
+  }
+  const crtp header;
+  int16_t ax;
+  int16_t ay;
+  int16_t az;
+  int16_t gx;
+  int16_t gy;
+  int16_t gz;
+  int16_t headingx;
+  int16_t headingy;
+  int16_t headingz;
+  uint32_t pressure;
+  uint32_t elapsed_time;
+}__attribute__((packed));
+CHECKSIZE_RESPONSE(crtpImuExpDataResponse)
+
 // Port 11 CrazySwarm Experimental
 
 typedef uint16_t fp16_t;

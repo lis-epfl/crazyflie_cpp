@@ -113,22 +113,6 @@ Crazyflie::Crazyflie(
   }
 }
 
-void Crazyflie::sendPacketNoAck(int cf_id , const uint8_t* data, uint32_t length)
-{
-  if (!g_crazyflieUSB[cf_id] && !g_crazyradios[cf_id]){
-    throw std::runtime_error ("No such crazyflie ID ! Try again");
-  }
-  if (g_crazyflieUSB[cf_id]){
-    std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[cf_id]);
-    g_crazyflieUSB[cf_id]->sendPacketNoAck(data, length);
-    return;
-  }
-  if (g_crazyradios[cf_id]){
-    std::unique_lock<std::mutex> mlock(g_radioMutex[cf_id]);
-    g_crazyradios[cf_id]->sendPacketNoAck(data, length);
-  }
-}
-
 void Crazyflie::logReset()
 {
   crtpLogResetRequest request;
@@ -912,8 +896,17 @@ void Crazyflie::handleAck(
     if (m_emptyAckCallback) {
       m_emptyAckCallback(r);
     }
-  }
-  else {
+  }else if(crtpMotorsDataResponse::match(result)){
+    crtpMotorsDataResponse* r = (crtpMotorsDataResponse *) result.data;
+    if (m_motorsControlCallback){
+      m_motorsControlCallback(r);
+    }
+  } else if(crtpImuExpDataResponse::match(result)){
+    crtpImuExpDataResponse* r = (crtpImuExpDataResponse *) result.data;
+    if (m_imuExpDataResponseCallback){
+      m_imuExpDataResponseCallback(r);
+    }
+  }else {
     crtp* header = (crtp*)result.data;
     m_logger.warning("Don't know ack: Port: " + std::to_string((int)header->port)
       + " Channel: " + std::to_string((int)header->channel)
