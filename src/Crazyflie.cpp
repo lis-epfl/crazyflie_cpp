@@ -113,20 +113,43 @@ Crazyflie::Crazyflie(
   }
 }
 
-void Crazyflie::sendPacketNoAck(int cf_id , const uint8_t* data, uint32_t length)
+bool Crazyflie::sendPacket(const uint8_t* data, uint32_t length)
 {
-  if (!g_crazyflieUSB[cf_id] && !g_crazyradios[cf_id]){
-    throw std::runtime_error ("No such crazyflie ID ! Try again");
+  {
+    if (g_crazyflieUSB[m_devId]){
+      std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
+      g_crazyflieUSB[m_devId]->sendPacketNoAck(data , length);
+      return true;
+    }
   }
-  if (g_crazyflieUSB[cf_id]){
-    std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[cf_id]);
-    g_crazyflieUSB[cf_id]->sendPacketNoAck(data, length);
-    return;
+  {
+    if (g_crazyradios[m_devId]){
+      return sendPacketRadio(data , length);
+    }
   }
-  if (g_crazyradios[cf_id]){
-    std::unique_lock<std::mutex> mlock(g_radioMutex[cf_id]);
-    g_crazyradios[cf_id]->sendPacketNoAck(data, length);
+
+  throw std::runtime_error("No radio/usb link for communication !");
+}
+
+bool Crazyflie::recvAndHandlePacket(ITransport::Ack& result, uint32_t timeout)
+{
+  if (g_crazyflieUSB[m_devId]){
+    //No need to take the
+    g_crazyflieUSB[m_devId]->recvPacket(result , timeout);
   }
+  if (g_crazyradios[m_devId]){
+    // May be take the mutex here
+    std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
+    g_crazyradios[m_devId]->recvPacket(result , timeout);
+  }
+  if(g_crazyflieUSB[m_devId] || g_crazyradios[m_devId]){
+    bool has_batch = handleAck(result);
+    if (has_batch)
+      handleBatchAck(result);
+    return result.ack;
+  }
+
+  throw std::runtime_error("No radio/usb link for communication !");
 }
 
 void Crazyflie::logReset()
@@ -305,6 +328,9 @@ void Crazyflie::writeFlash(
   BootloaderTarget target,
   const std::vector<uint8_t>& data)
 {
+  if (! m_radio)
+    throw std::runtime_error("Need the radio PA dongle !");
+
   // Get info about the target
   bootloaderGetInfoRequest req(target);
   startBatchRequest();
@@ -399,7 +425,11 @@ void Crazyflie::writeFlash(
       while (true) {
         Crazyradio::Ack ack;
         bootloaderFlashStatusRequest statReq(target);
-        sendPacket((const uint8_t*)&statReq, sizeof(statReq), ack);
+        //sendPacket((const uint8_t*)&statReq, sizeof(statReq), ack);
+        {
+          std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
+          m_radio->sendPacket((const uint8_t*)&statReq, sizeof(statReq), ack);
+        }
         if (   ack.ack
             && ack.size == 5
             && memcmp(&req, ack.data, 3) == 0) {
@@ -791,15 +821,6 @@ void Crazyflie::setParam(uint8_t id, const ParamValue& value)
   setRequestedParams();
 }
 
-bool Crazyflie::sendPacket(
-  const uint8_t* data,
-  uint32_t length)
-{
-  Crazyradio::Ack ack;
-  sendPacket(data, length, ack);
-  return ack.ack;
-}
-
  void Crazyflie::sendPacketOrTimeout(
    const uint8_t* data,
    uint32_t length,
@@ -815,17 +836,21 @@ bool Crazyflie::sendPacket(
   }
 }
 
-void Crazyflie::sendPacket(
+bool Crazyflie::sendPacketRadio(
   const uint8_t* data,
-  uint32_t length,
-  Crazyradio::Ack& ack)
+  uint32_t length)
 {
   static uint32_t numPackets = 0;
   static uint32_t numAcks = 0;
 
+  if (! m_radio)
+    return false;
+
+  Crazyradio::Ack ack;
+
   numPackets++;
 
-  if (m_radio) {
+  {
     std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
     if (m_radio->getAddress() != m_address) {
       m_radio->setAddress(m_address);
@@ -840,15 +865,16 @@ void Crazyflie::sendPacket(
       m_radio->setAckEnable(true);
     }
     m_radio->sendPacket(data, length, ack);
-  } else {
-    std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
-    m_transport->sendPacket(data, length, ack);
   }
+
   ack.data[ack.size] = 0;
   if (ack.ack) {
-    handleAck(ack);
+    bool has_batch = handleAck(ack);
+    if (has_batch)
+      handleBatchAck(ack);
     numAcks++;
   }
+
   if (numPackets == 100) {
     if (m_linkQualityCallback) {
       // We just take the ratio of sent vs. acked packets here
@@ -859,11 +885,15 @@ void Crazyflie::sendPacket(
     numPackets = 0;
     numAcks = 0;
   }
+
+  return ack.ack;
 }
 
-void Crazyflie::handleAck(
+bool Crazyflie::handleAck(
   const Crazyradio::Ack& result)
 {
+  bool has_batch = false;
+
   if (crtpConsoleResponse::match(result)) {
     if (result.size > 0) {
       crtpConsoleResponse* r = (crtpConsoleResponse*)result.data;
@@ -875,12 +905,15 @@ void Crazyflie::handleAck(
   }
   else if (crtpLogGetInfoResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpLogGetItemResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpLogControlResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpLogDataResponse::match(result)) {
     crtpLogDataResponse* r = (crtpLogDataResponse*)result.data;
@@ -894,26 +927,40 @@ void Crazyflie::handleAck(
   }
   else if (crtpParamTocGetInfoResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpParamTocGetItemResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpMemoryGetNumberResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpMemoryGetInfoResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpParamValueResponse::match(result)) {
     // handled in batch system
+    has_batch = true;
   }
   else if (crtpPlatformRSSIAck::match(result)) {
     crtpPlatformRSSIAck* r = (crtpPlatformRSSIAck*)result.data;
     if (m_emptyAckCallback) {
       m_emptyAckCallback(r);
     }
-  }
-  else {
+  }else if(crtpMotorsDataResponse::match(result)){
+    crtpMotorsDataResponse* r = (crtpMotorsDataResponse *) result.data;
+    if (m_motorsControlCallback){
+      m_motorsControlCallback(r);
+    }
+  } else if(crtpImuExpDataResponse::match(result)){
+    crtpImuExpDataResponse* r = (crtpImuExpDataResponse *) result.data;
+    if (m_imuExpDataResponseCallback){
+      m_imuExpDataResponseCallback(r);
+    }
+  }else {
     crtp* header = (crtp*)result.data;
     m_logger.warning("Don't know ack: Port: " + std::to_string((int)header->port)
       + " Channel: " + std::to_string((int)header->channel)
@@ -923,6 +970,7 @@ void Crazyflie::handleAck(
     // }
     queueGenericPacket(result);
   }
+  return has_batch;
 }
 
 const Crazyflie::LogTocEntry* Crazyflie::getLogTocEntry(
@@ -990,6 +1038,7 @@ void Crazyflie::handleRequests(
   float timePerRequest)
 {
   auto start = std::chrono::system_clock::now();
+
   Crazyradio::Ack ack;
   m_numRequestsFinished = 0;
   bool sendPing = false;
@@ -1000,9 +1049,8 @@ void Crazyflie::handleRequests(
     if (!sendPing) {
       for (const auto& request : m_batchRequests) {
         if (!request.finished) {
-          // std::cout << "sendReq" << std::endl;
-          sendPacket(request.request.data(), request.request.size(), ack);
-          handleBatchAck(ack);
+          //std::cout << "sendReq" << std::endl;
+          sendPacket(request.request.data(), request.request.size());
 
           auto end = std::chrono::system_clock::now();
           std::chrono::duration<double> elapsedSeconds = end-start;
@@ -1014,13 +1062,9 @@ void Crazyflie::handleRequests(
       sendPing = true;
     } else {
       for (size_t i = 0; i < 10; ++i) {
-        uint8_t ping = 0xFF;
-        sendPacket(&ping, sizeof(ping), ack);
-        handleBatchAck(ack);
-        // if (ack.ack && crtpPlatformRSSIAck::match(ack)) {
-        //   sendPing = false;
-        // }
-
+        // std::cout << "sendResp" << std::endl;
+        recvAndHandlePacket(ack , 1000);
+        // std::cout << "recv : " << (ack.ack ? 1 : 0) << std::endl;
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<double> elapsedSeconds = end-start;
         if (elapsedSeconds.count() > timeout) {

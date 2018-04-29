@@ -31,4 +31,8 @@ public:
   virtual void sendPacketNoAck(
     const uint8_t* data,
     uint32_t length) = 0;
+
+  virtual void recvPacket(
+    Ack& result,
+    uint32_t timeout) = 0;
 };

@@ -186,6 +186,14 @@ void Crazyradio::sendPacket(
     result.size = transferred - 1;
 }
 
+void Crazyradio::recvPacket(
+    ITransport::Ack& result,
+    uint32_t timeout){
+
+    uint8_t ping = 0xFF;
+    sendPacket(&ping, sizeof(ping), result);
+}
+
 void Crazyradio::sendPacketNoAck(
     const uint8_t* data,
     uint32_t length)

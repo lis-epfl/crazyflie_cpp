@@ -95,6 +95,12 @@ public:
         const uint8_t* data,
         uint32_t totalLength);
 
+    /* Useless for the moment for radio communication */
+    /* Because of PTX and PRX specs in the radio communication */
+    virtual void recvPacket(
+        ITransport::Ack& result,
+        uint32_t timeout);
+
 private:
     uint8_t m_channel;
     uint64_t m_address;

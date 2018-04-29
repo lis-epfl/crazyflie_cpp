@@ -109,6 +109,30 @@ void CrazyflieUSB::sendPacketNoAck(
     }
 }
 
+void CrazyflieUSB::recvPacket(
+    ITransport::Ack& result,
+    uint32_t timeout){
+
+    int status;
+    int transferred;
+    
+    result.ack = false;
+    result.size = 0;
+    status = libusb_bulk_transfer(
+        m_handle,
+        /* endpoint*/ (0x81 | LIBUSB_ENDPOINT_IN),
+        (unsigned char*)&result.data[0],
+        sizeof(result) - 2,
+        &transferred,
+        /*timeout*/ timeout);
+    if (status != LIBUSB_SUCCESS) {
+        throw std::runtime_error(libusb_error_name(status));
+    }
+    result.ack = true;
+
+    result.size = transferred;
+}
+
 void CrazyflieUSB::setCrtpToUsb(bool crtpToUsb)
 {
     sendVendorSetup(0x01, 0x01, crtpToUsb, NULL, 0);

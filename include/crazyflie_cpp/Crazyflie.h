@@ -9,6 +9,7 @@
 #include <set>
 #include <map>
 #include <chrono>
+#include <functional>
 
 class Logger
 {
@@ -109,11 +110,14 @@ public:
 
   void logReset();
 
-  static void sendPacketNoAck(
-    int cf_id ,
+  bool sendPacket(
     const uint8_t* data,
     uint32_t length);
-  
+
+  bool recvAndHandlePacket(
+    ITransport::Ack& result,
+    uint32_t timeout);
+
   void sendSetpoint(
     float roll,
     float pitch,
@@ -149,8 +153,7 @@ public:
   void sendPing();
 
   void reboot();
-  // returns new address
-  uint64_t rebootToBootloader();
+  uint64_t rebootToBootloader(); // returns new address
   void sysoff();
   void trySysOff();
   void alloff();
@@ -238,6 +241,16 @@ public:
     m_consoleCallback = cb;
   }
 
+  void setMotorsCallback(
+    std::function<void(const crtpMotorsDataResponse*)> cb){
+    m_motorsControlCallback = cb;
+  }
+
+  void setImuExpDataCallback(
+    std::function<void(const crtpImuExpDataResponse*)> cb){
+    m_imuExpDataResponseCallback = cb;
+  }
+
   static size_t size(LogType t) {
     switch(t) {
       case LogTypeUint8:
@@ -303,12 +316,8 @@ public:
     uint8_t groupMask = 0);
 
 private:
-  void sendPacket(
-    const uint8_t* data,
-    uint32_t length,
-    Crazyradio::Ack& result);
 
-  bool sendPacket(
+  bool sendPacketRadio(
     const uint8_t* data,
     uint32_t length);
 
@@ -317,7 +326,7 @@ private:
    uint32_t length,
    float timeout = 1.0);
 
-  void handleAck(
+  bool handleAck(
     const Crazyradio::Ack& result);
 
   std::vector<Crazyradio::Ack> m_generic_packets;
@@ -434,6 +443,9 @@ private:
   std::vector<MemoryTocEntry> m_memoryTocEntries;
 
   std::function<void(const crtpPlatformRSSIAck*)> m_emptyAckCallback;
+  std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
+  std::function<void(const crtpImuExpDataResponse*)> m_imuExpDataResponseCallback;
+
   std::function<void(float)> m_linkQualityCallback;
   std::function<void(const char*)> m_consoleCallback;
 
@@ -454,6 +466,8 @@ private:
 
   // logging
   Logger& m_logger;
+
+  // tx and rx queue
 };
 
 template<class T>

@@ -32,6 +32,10 @@ public:
     const uint8_t* data,
     uint32_t length);
 
+  virtual void recvPacket(
+    ITransport::Ack& result,
+    uint32_t timeout);
+
 private:
   void setCrtpToUsb(bool crtpToUsb);
 
