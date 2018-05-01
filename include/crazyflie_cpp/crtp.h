@@ -868,7 +868,7 @@ CHECKSIZE_RESPONSE(crtpMotorsDataResponse)
 struct crtpImuExpDataResponse
 {
   static bool match(const Crazyradio::Ack& response){
-    return (response.size == 31 &&
+    return (response.size == 27 &&
               crtp(response.data[0]) == crtp(0x09, 0));
   }
   const crtp header;
