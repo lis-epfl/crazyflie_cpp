@@ -896,17 +896,26 @@ void Crazyflie::handleAck(
     if (m_emptyAckCallback) {
       m_emptyAckCallback(r);
     }
-  }else if(crtpMotorsDataResponse::match(result)){
+  }
+  else if(crtpMotorsDataResponse::match(result)){
     crtpMotorsDataResponse* r = (crtpMotorsDataResponse *) result.data;
     if (m_motorsControlCallback){
       m_motorsControlCallback(r);
     }
-  } else if(crtpImuExpDataResponse::match(result)){
+  }
+  else if(crtpImuExpDataResponse::match(result)){
     crtpImuExpDataResponse* r = (crtpImuExpDataResponse *) result.data;
     if (m_imuExpDataResponseCallback){
       m_imuExpDataResponseCallback(r);
     }
-  }else {
+  }
+  else if (crtpImuSimDataResponse::match(result)){
+    crtpImuSimDataResponse* r = (crtpImuSimDataResponse *) result.data;
+    if(m_imuSimDataResponseCallback){
+      m_imuSimDataResponseCallback(r);
+    }
+  }
+  else {
     crtp* header = (crtp*)result.data;
     m_logger.warning("Don't know ack: Port: " + std::to_string((int)header->port)
       + " Channel: " + std::to_string((int)header->channel)

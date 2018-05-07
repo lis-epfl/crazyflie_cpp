@@ -865,6 +865,16 @@ struct crtpMotorsDataResponse
 } __attribute__((packed));
 CHECKSIZE_RESPONSE(crtpMotorsDataResponse)
 
+struct crtpImuSimDataResponse
+{
+  static bool match(const Crazyradio::Ack& response) {
+    return (response.size == 2) &&
+            crtp(response.data[0]) == crtp(0x09, 0);
+  }
+  const crtp header;
+  uint8_t isGyroBiasFound;
+}__attribute__((packed));
+
 struct crtpImuExpDataResponse
 {
   static bool match(const Crazyradio::Ack& response){

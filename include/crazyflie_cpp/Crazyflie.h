@@ -243,6 +243,11 @@ public:
     m_motorsControlCallback = cb;
   }
 
+  void setImuSimResponseCallback(
+    std::function<void(const crtpImuSimDataResponse*)> cb){
+    m_imuSimDataResponseCallback = cb;
+  }
+
   void setImuExpDataCallback(
     std::function<void(const crtpImuExpDataResponse*)> cb){
     m_imuExpDataResponseCallback = cb;
@@ -443,6 +448,7 @@ private:
 
   std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
   std::function<void(const crtpImuExpDataResponse*)> m_imuExpDataResponseCallback;
+  std::function<void(const crtpImuSimDataResponse*)> m_imuSimDataResponseCallback;
 
   std::function<void(float)> m_linkQualityCallback;
   std::function<void(const char*)> m_consoleCallback;
