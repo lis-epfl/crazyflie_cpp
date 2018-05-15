@@ -7,6 +7,7 @@
 
 #include "Crazyradio.h"
 #include "CrazyflieUSB.h"
+#include "CrazyflieSocket.h"
 
 #include <iostream>
 #include <fstream>
@@ -25,8 +26,10 @@ std::mutex g_radioMutex[MAX_RADIOS];
 CrazyflieUSB* g_crazyflieUSB[MAX_USB];
 std::mutex g_crazyflieusbMutex[MAX_USB];
 
-Logger EmptyLogger;
+CrazyflieSocket* g_crazyflieSocket;
+std::mutex g_crazyflieSocketMutex;
 
+Logger EmptyLogger;
 
 Crazyflie::Crazyflie(
   const std::string& link_uri,
@@ -93,23 +96,35 @@ Crazyflie::Crazyflie(
   else {
     success = std::sscanf(link_uri.c_str(), "usb://%d",
        &m_devId) == 1;
-
     if (m_devId >= MAX_USB) {
       throw std::runtime_error("This version does not support that many CFs over USB. Adjust MAX_USB and recompile!");
     }
 
     {
       std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
-      if (!g_crazyflieUSB[m_devId]) {
+      if (!g_crazyflieUSB[m_devId] && success) {
         g_crazyflieUSB[m_devId] = new CrazyflieUSB(m_devId);
+        m_transport = g_crazyflieUSB[m_devId];
       }
     }
-
-    m_transport = g_crazyflieUSB[m_devId];
   }
 
-  if (!success) {
-    throw std::runtime_error("Uri is not valid!");
+  // Try to match the link with an sitl socket link
+  if(!success){
+    std::string delimiter = "://";
+    std::size_t found = link_uri.find(delimiter);
+    if (found == std::string::npos)
+      throw std::runtime_error("Uri is not valid");
+    std::string dest_addr = link_uri.substr(0, found);
+    std::string dest_port = link_uri.substr(found + delimiter.length());
+    {
+      std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex);
+      if(!g_crazyflieSocket){
+        g_crazyflieSocket =  new CrazyflieSocket();
+        g_crazyflieSocket->setSocketLinkDest(std::stoi(dest_port) , dest_addr.c_str());
+        m_transport = g_crazyflieSocket;
+      }
+    }
   }
 }
 
@@ -593,7 +608,7 @@ void Crazyflie::requestParamToc(bool forceNoCache)
       addRequest(readRequest, 1);
     }
     handleRequests();
-
+    
     // Update internal structure with obtained data
     m_paramTocEntries.resize(len);
     for (size_t i = 0; i < len; ++i) {
@@ -824,6 +839,9 @@ void Crazyflie::sendPacket(
       m_radio->setAckEnable(true);
     }
     m_radio->sendPacket(data, length, ack);
+  } else if (g_crazyflieSocket){
+    std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex);
+    m_transport->sendPacket(data, length, ack);
   } else {
     std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
     m_transport->sendPacket(data, length, ack);
