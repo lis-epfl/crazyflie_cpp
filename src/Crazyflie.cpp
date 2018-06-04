@@ -19,6 +19,7 @@
 
 #define MAX_RADIOS 16
 #define MAX_USB     4
+#define MAX_SOCKET 16
 
 Crazyradio* g_crazyradios[MAX_RADIOS];
 std::mutex g_radioMutex[MAX_RADIOS];
@@ -26,8 +27,9 @@ std::mutex g_radioMutex[MAX_RADIOS];
 CrazyflieUSB* g_crazyflieUSB[MAX_USB];
 std::mutex g_crazyflieusbMutex[MAX_USB];
 
-CrazyflieSocket* g_crazyflieSocket;
-std::mutex g_crazyflieSocketMutex;
+CrazyflieSocket* g_crazyflieSocket[MAX_SOCKET];
+std::mutex g_crazyflieSocketMutex[MAX_SOCKET];
+int num_socket = 0;
 
 Logger EmptyLogger;
 
@@ -113,16 +115,18 @@ Crazyflie::Crazyflie(
   if(!success){
     std::string delimiter = "://";
     std::size_t found = link_uri.find(delimiter);
-    if (found == std::string::npos)
-      throw std::runtime_error("Uri is not valid");
+    if (found == std::string::npos || num_socket >= MAX_SOCKET)
+      throw std::runtime_error("Uri is not valid | This version does not support that many CFs over socket. Adjust MAX_SOCKET");
     std::string dest_addr = link_uri.substr(0, found);
     std::string dest_port = link_uri.substr(found + delimiter.length());
     {
-      std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex);
-      if(!g_crazyflieSocket){
-        g_crazyflieSocket =  new CrazyflieSocket();
-        g_crazyflieSocket->setSocketLinkDest(std::stoi(dest_port) , dest_addr.c_str());
-        m_transport = g_crazyflieSocket;
+      std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[num_socket]);
+      if(!g_crazyflieSocket[num_socket]){
+        g_crazyflieSocket[num_socket] =  new CrazyflieSocket();
+        g_crazyflieSocket[num_socket]->setSocketLinkDest(std::stoi(dest_port) , dest_addr.c_str());
+        m_transport = g_crazyflieSocket[num_socket];
+        m_devId = num_socket;
+        num_socket++;
       }
     }
   }
@@ -839,8 +843,8 @@ void Crazyflie::sendPacket(
       m_radio->setAckEnable(true);
     }
     m_radio->sendPacket(data, length, ack);
-  } else if (g_crazyflieSocket){
-    std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex);
+  } else if (g_crazyflieSocket[m_devId]){
+    std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[m_devId]);
     m_transport->sendPacket(data, length, ack);
   } else {
     std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
