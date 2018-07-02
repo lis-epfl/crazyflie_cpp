@@ -109,6 +109,15 @@ public:
 
   void logReset();
   
+  bool isSITLsim();
+  
+  void sendPacketNoAck(
+    const uint8_t* data,
+    uint32_t length);
+
+  void recvPacket(
+    Crazyradio::Ack& result);
+
   void sendPacket(
     const uint8_t* data,
     uint32_t length,

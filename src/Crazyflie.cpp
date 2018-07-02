@@ -147,13 +147,24 @@ void Crazyflie::sendSetpoint(
   uint16_t thrust)
 {
   crtpSetpointRequest request(roll, pitch, yawrate, thrust);
-  sendPacket((const uint8_t*)&request, sizeof(request));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&request, sizeof(request));
+  else
+    sendPacket((const uint8_t*)&request, sizeof(request));
 }
 
 void Crazyflie::sendStop()
 {
   crtpStopRequest request;
-  sendPacket((const uint8_t*)&request, sizeof(request));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&request, sizeof(request));
+  else
+    sendPacket((const uint8_t*)&request, sizeof(request));
+}
+
+bool Crazyflie::isSITLsim()
+{
+  return g_crazyflieSocket[m_devId];
 }
 
 void Crazyflie::sendPositionSetpoint(
@@ -163,7 +174,10 @@ void Crazyflie::sendPositionSetpoint(
   float yaw)
 {
   crtpPositionSetpointRequest request(x, y, z, yaw);
-  sendPacket((const uint8_t*)&request, sizeof(request));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&request, sizeof(request));
+  else
+    sendPacket((const uint8_t*)&request, sizeof(request));
 }
 
 void Crazyflie::sendHoverSetpoint(
@@ -173,7 +187,10 @@ void Crazyflie::sendHoverSetpoint(
   float zDistance)
 {
   crtpHoverSetpointRequest request(vx, vy, yawrate, zDistance);
-  sendPacket((const uint8_t*)&request, sizeof(request));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&request, sizeof(request));
+  else
+    sendPacket((const uint8_t*)&request, sizeof(request));
 }
 
 void Crazyflie::sendFullStateSetpoint(
@@ -189,7 +206,10 @@ void Crazyflie::sendFullStateSetpoint(
     ax, ay, az,
     qx, qy, qz, qw,
     rollRate, pitchRate, yawRate);
-  sendPacket((const uint8_t*)&request, sizeof(request));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&request, sizeof(request));
+  else
+    sendPacket((const uint8_t*)&request, sizeof(request));
 }
 
 void Crazyflie::sendExternalPositionUpdate(
@@ -198,7 +218,10 @@ void Crazyflie::sendExternalPositionUpdate(
   float z)
 {
   crtpExternalPositionUpdate position(x, y, z);
-  sendPacket((const uint8_t*)&position, sizeof(position));
+  if (g_crazyflieSocket[m_devId])
+    sendPacketNoAck((const uint8_t*)&position, sizeof(position));
+  else
+    sendPacket((const uint8_t*)&position, sizeof(position));
 }
 
 void Crazyflie::sendPing()
@@ -817,6 +840,33 @@ bool Crazyflie::sendPacket(
     }
   }
 }
+
+void Crazyflie::sendPacketNoAck(
+  const uint8_t* data,
+  uint32_t length)
+{
+  if (g_crazyflieSocket[m_devId]){
+    // No need for a lock here
+    // std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[m_devId]);
+    m_transport->sendPacketNoAck(data, length);
+  } 
+}
+
+void Crazyflie::recvPacket(
+    Crazyradio::Ack& ack)
+{
+  if (g_crazyflieSocket[m_devId]){
+    // No need for a lock here
+    // std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[m_devId]);
+    g_crazyflieSocket[m_devId]->recvPacket(ack);
+  }
+  // Handle the message after reception
+  ack.data[ack.size] = 0;
+  if (ack.ack) {
+    handleAck(ack);
+  } 
+}
+
 
 void Crazyflie::sendPacket(
   const uint8_t* data,

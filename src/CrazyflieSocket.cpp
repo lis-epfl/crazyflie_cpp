@@ -120,3 +120,31 @@ void CrazyflieSocket::sendPacketNoAck(
         throw std::runtime_error(sstr.str());
     }
 }
+
+void CrazyflieSocket::recvPacket(Ack& result)
+{
+    int result_poll = ::poll(&m_fds[0], (sizeof(m_fds[0]) / sizeof(m_fds[0])), 1000);
+    if (result_poll < 0){
+        throw std::runtime_error(strerror(errno));
+    }else if (result_poll == 0){
+        result.ack = false;
+        result.size = 0;
+        return ;
+    }
+
+    if ( ! (m_fds[0].revents & POLLIN) ){
+        result.ack = false;
+        result.size = 0;
+        return;
+    }
+
+    int transferred = recvfrom(m_fd, (unsigned char *) &result.data[0], sizeof(result) - 2, 0, (struct sockaddr *)&m_srcaddr, &m_addrlen);
+    if (transferred <= 0){
+        result.ack = false;
+        result.size = 0;
+        return;
+    }
+    
+    result.ack = true;
+    result.size = transferred;
+}

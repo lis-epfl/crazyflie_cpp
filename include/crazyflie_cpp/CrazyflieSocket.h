@@ -34,6 +34,9 @@ public:
     const uint8_t* data,
     uint32_t length);
 
+  void recvPacket(
+    ITransport::Ack& result);
+
 private:
   struct sockaddr_in m_myaddr;
   struct sockaddr_in m_srcaddr;
