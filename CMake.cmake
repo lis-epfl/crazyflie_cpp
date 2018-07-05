@@ -14,7 +14,6 @@ add_library(crazyflie_cpp
   src/Crazyflie.cpp
   src/CrazyflieUSB.cpp
   src/Crazyradio.cpp
-  src/CrazyflieSocket.cpp
   src/crtp.cpp
   src/USBDevice.cpp
 )
