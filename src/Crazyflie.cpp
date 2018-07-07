@@ -161,6 +161,11 @@ void Crazyflie::logReset()
   handleRequests();
 }
 
+bool Crazyflie::isSim()
+{
+  return m_isSim;
+}
+
 void Crazyflie::sendSetpoint(
   float roll,
   float pitch,

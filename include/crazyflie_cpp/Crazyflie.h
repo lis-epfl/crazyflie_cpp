@@ -113,6 +113,8 @@ public:
     std::function<void(const uint8_t* , uint32_t)> sendDataFunc,
     std::function<void(Crazyradio::Ack *)> recvDataFunc);
 
+  bool isSim();
+
   void logReset();
   
   /* Used mainly for sensors message in SITL/HITL */
