@@ -115,6 +115,11 @@ public:
 
   void logReset();
   
+  /* Used mainly for sensors message in SITL/HITL */
+  void sendPacketNoAck(
+    const uint8_t* data,
+    uint32_t length);
+
   void sendPacket(
     const uint8_t* data,
     uint32_t length,

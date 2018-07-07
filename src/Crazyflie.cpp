@@ -845,6 +845,35 @@ bool Crazyflie::sendPacket(
   }
 }
 
+void Crazyflie::sendPacketNoAck(
+  const uint8_t *data, 
+  uint32_t length)
+{
+  if (m_isSim)
+    m_sendDataCallback(data , length);
+  else {
+    if (m_radio) {
+      std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
+      if (m_radio->getAddress() != m_address) {
+        m_radio->setAddress(m_address);
+      }
+      if (m_radio->getChannel() != m_channel) {
+        m_radio->setChannel(m_channel);
+      }
+      if (m_radio->getDatarate() != m_datarate) {
+        m_radio->setDatarate(m_datarate);
+      }
+      if (!m_radio->getAckEnable()) {
+        m_radio->setAckEnable(true);
+      }
+      m_radio->sendPacketNoAck(data, length);
+    } else {
+      std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
+      m_transport->sendPacketNoAck(data, length);
+    }
+  }
+}
+
 void Crazyflie::sendPacket(
   const uint8_t* data,
   uint32_t length,
