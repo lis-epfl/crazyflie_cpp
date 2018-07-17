@@ -7,7 +7,6 @@
 
 #include "Crazyradio.h"
 #include "CrazyflieUSB.h"
-#include "CrazyflieSocket.h"
 
 #include <iostream>
 #include <fstream>
@@ -19,7 +18,6 @@
 
 #define MAX_RADIOS 16
 #define MAX_USB     4
-#define MAX_SOCKET 16
 
 Crazyradio* g_crazyradios[MAX_RADIOS];
 std::mutex g_radioMutex[MAX_RADIOS];
@@ -27,11 +25,82 @@ std::mutex g_radioMutex[MAX_RADIOS];
 CrazyflieUSB* g_crazyflieUSB[MAX_USB];
 std::mutex g_crazyflieusbMutex[MAX_USB];
 
-CrazyflieSocket* g_crazyflieSocket[MAX_SOCKET];
-std::mutex g_crazyflieSocketMutex[MAX_SOCKET];
-int num_socket = 0;
-
 Logger EmptyLogger;
+
+/*************** Additions/Modifications for Simulation ****************/
+Crazyflie::Crazyflie(
+  std::function<void(const uint8_t* , uint32_t)> sendDataFunc,
+  std::function<void(Crazyradio::Ack &, int64_t)> recvDataFunc,
+  Logger& logger)
+  : m_radio(nullptr)
+  , m_transport(nullptr)
+  , m_devId(0)
+  , m_channel(0)
+  , m_address(0)
+  , m_datarate(Crazyradio::Datarate_250KPS)
+  , m_logTocEntries()
+  , m_logBlockCb()
+  , m_paramTocEntries()
+  , m_paramValues()
+  , m_emptyAckCallback(nullptr)
+  , m_linkQualityCallback(nullptr)
+  , m_consoleCallback(nullptr)
+  , m_logger(logger)
+  , m_isSim(true)
+{
+  m_recvDataCallback = recvDataFunc;
+  m_sendDataCallback = sendDataFunc;
+}
+
+void Crazyflie::sendPing(int64_t timeout)
+{
+  if (m_isSim){
+    Crazyradio::Ack ack;
+    m_recvDataCallback(ack , timeout);
+    if (ack.ack)
+      handleAck(ack);
+    return;
+  }
+  uint8_t ping = 0xFF;
+  sendPacket(&ping, sizeof(ping));
+}
+
+void Crazyflie::sendPacketNoAck(
+  const uint8_t* data,
+  uint32_t length)
+{
+  if (m_isSim){
+    m_sendDataCallback(data , length);
+  }else {
+    if (m_radio) {
+      std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
+      if (m_radio->getAddress() != m_address) {
+        m_radio->setAddress(m_address);
+      }
+      if (m_radio->getChannel() != m_channel) {
+        m_radio->setChannel(m_channel);
+      }
+      if (m_radio->getDatarate() != m_datarate) {
+        m_radio->setDatarate(m_datarate);
+      }
+      if (!m_radio->getAckEnable()) {
+        m_radio->setAckEnable(true);
+      }
+      m_radio->sendPacketNoAck(data, length);
+    } else {
+      std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
+      m_transport->sendPacketNoAck(data, length);
+    }
+  }
+}
+
+bool Crazyflie::isSim()
+{
+  return m_isSim;
+}
+
+/* sendPacket <-> sendPacketNoAck <-> sendExternalPositionUpdate
+/***********************************************************************/
 
 Crazyflie::Crazyflie(
   const std::string& link_uri,
@@ -50,6 +119,7 @@ Crazyflie::Crazyflie(
   , m_linkQualityCallback(nullptr)
   , m_consoleCallback(nullptr)
   , m_logger(logger)
+  , m_isSim(false)
 {
   int datarate;
   int channel;
@@ -113,22 +183,7 @@ Crazyflie::Crazyflie(
 
   // Try to match the link with an sitl socket link
   if(!success){
-    std::string delimiter = "://";
-    std::size_t found = link_uri.find(delimiter);
-    if (found == std::string::npos || num_socket >= MAX_SOCKET)
-      throw std::runtime_error("Uri is not valid | This version does not support that many CFs over socket. Adjust MAX_SOCKET");
-    std::string dest_addr = link_uri.substr(0, found);
-    std::string dest_port = link_uri.substr(found + delimiter.length());
-    {
-      std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[num_socket]);
-      if(!g_crazyflieSocket[num_socket]){
-        g_crazyflieSocket[num_socket] =  new CrazyflieSocket();
-        g_crazyflieSocket[num_socket]->setSocketLinkDest(std::stoi(dest_port) , dest_addr.c_str());
-        m_transport = g_crazyflieSocket[num_socket];
-        m_devId = num_socket;
-        num_socket++;
-      }
-    }
+    throw std::runtime_error("Uri is not valid ");
   }
 }
 
@@ -198,13 +253,10 @@ void Crazyflie::sendExternalPositionUpdate(
   float z)
 {
   crtpExternalPositionUpdate position(x, y, z);
-  sendPacket((const uint8_t*)&position, sizeof(position));
-}
-
-void Crazyflie::sendPing()
-{
-  uint8_t ping = 0xFF;
-  sendPacket(&ping, sizeof(ping));
+  if(m_isSim)
+    sendPacketNoAck((const uint8_t*)&position, sizeof(position));
+  else
+    sendPacket((const uint8_t*)&position, sizeof(position));
 }
 
 /**
@@ -826,8 +878,17 @@ void Crazyflie::sendPacket(
   static uint32_t numPackets = 0;
   static uint32_t numAcks = 0;
 
-  numPackets++;
+  if (m_isSim){
+    m_sendDataCallback(data , length);
+    m_recvDataCallback(ack , sitl_wait_timeout);
+    ack.data[ack.size] = 0;
+    if (ack.ack)
+      handleAck(ack);
+    return;
+  }
 
+  numPackets++;
+  
   if (m_radio) {
     std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
     if (m_radio->getAddress() != m_address) {
@@ -843,9 +904,6 @@ void Crazyflie::sendPacket(
       m_radio->setAckEnable(true);
     }
     m_radio->sendPacket(data, length, ack);
-  } else if (g_crazyflieSocket[m_devId]){
-    std::unique_lock<std::mutex> mlock(g_crazyflieSocketMutex[m_devId]);
-    m_transport->sendPacket(data, length, ack);
   } else {
     std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
     m_transport->sendPacket(data, length, ack);
@@ -923,12 +981,6 @@ void Crazyflie::handleAck(
     crtpMotorsDataResponse* r = (crtpMotorsDataResponse *) result.data;
     if (m_motorsControlCallback){
       m_motorsControlCallback(r);
-    }
-  }
-  else if(crtpImuExpDataResponse::match(result)){
-    crtpImuExpDataResponse* r = (crtpImuExpDataResponse *) result.data;
-    if (m_imuExpDataResponseCallback){
-      m_imuExpDataResponseCallback(r);
     }
   }
   else if (crtpImuSimDataResponse::match(result)){

@@ -9,6 +9,9 @@
 #include <set>
 #include <map>
 #include <chrono>
+#include <functional>
+
+#define sitl_wait_timeout 1000000
 
 class Logger
 {
@@ -106,13 +109,33 @@ public:
   Crazyflie(
     const std::string& link_uri,
     Logger& logger = EmptyLogger);
+  
+  /*************** Additions/Modifications for Simulation ****************/
+  Crazyflie(
+    std::function<void(const uint8_t* , uint32_t)> sendDataFunc,
+    std::function<void(Crazyradio::Ack &, int64_t)> recvDataFunc,
+    Logger& logger = EmptyLogger);
+
+  bool isSim();
+
+  void sendPacketNoAck(
+    const uint8_t* data,
+    uint32_t length);
+
+  void sendPing(int64_t timeout_usecs = sitl_wait_timeout); // default timeout = 1s
+
+  void setMotorsCallback(
+    std::function<void(const crtpMotorsDataResponse*)> cb){
+    m_motorsControlCallback = cb;
+  }
+
+  void setImuSimResponseCallback(
+    std::function<void(const crtpImuSimDataResponse*)> cb){
+    m_imuSimDataResponseCallback = cb;
+  }
+  /************************************************************************/
 
   void logReset();
-  
-  void sendPacket(
-    const uint8_t* data,
-    uint32_t length,
-    Crazyradio::Ack& result);
 
   void sendSetpoint(
     float roll,
@@ -145,8 +168,6 @@ public:
     float x,
     float y,
     float z);
-
-  void sendPing();
 
   void reboot();
   // returns new address
@@ -238,21 +259,6 @@ public:
     m_consoleCallback = cb;
   }
 
-  void setMotorsCallback(
-    std::function<void(const crtpMotorsDataResponse*)> cb){
-    m_motorsControlCallback = cb;
-  }
-
-  void setImuSimResponseCallback(
-    std::function<void(const crtpImuSimDataResponse*)> cb){
-    m_imuSimDataResponseCallback = cb;
-  }
-
-  void setImuExpDataCallback(
-    std::function<void(const crtpImuExpDataResponse*)> cb){
-    m_imuExpDataResponseCallback = cb;
-  }
-
   static size_t size(LogType t) {
     switch(t) {
       case LogTypeUint8:
@@ -319,11 +325,16 @@ public:
 
 private:
 
+  void sendPacket(
+    const uint8_t* data,
+    uint32_t length,
+    Crazyradio::Ack& result);
+
   bool sendPacket(
     const uint8_t* data,
     uint32_t length);
 
- void sendPacketOrTimeout(
+  void sendPacketOrTimeout(
    const uint8_t* data,
    uint32_t length,
    float timeout = 1.0);
@@ -428,6 +439,14 @@ private:
   }
 
 private:
+  /*************** Additions/Modifications for Simulation ****************/
+  bool m_isSim;
+  std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
+  std::function<void(const crtpImuSimDataResponse*)> m_imuSimDataResponseCallback;
+  std::function<void(const uint8_t* , uint32_t)> m_sendDataCallback;
+  std::function<void(Crazyradio::Ack& , int64_t)> m_recvDataCallback;
+  /***********************************************************************/
+
   Crazyradio* m_radio;
   ITransport* m_transport;
   int m_devId;
@@ -445,10 +464,6 @@ private:
   std::vector<MemoryTocEntry> m_memoryTocEntries;
 
   std::function<void(const crtpPlatformRSSIAck*)> m_emptyAckCallback;
-
-  std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
-  std::function<void(const crtpImuExpDataResponse*)> m_imuExpDataResponseCallback;
-  std::function<void(const crtpImuSimDataResponse*)> m_imuSimDataResponseCallback;
 
   std::function<void(float)> m_linkQualityCallback;
   std::function<void(const char*)> m_consoleCallback;
