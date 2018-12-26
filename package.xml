@@ -2,12 +2,15 @@
 <package>
   <name>crazyflie_cpp</name>
   <version>0.0.1</version>
-  <description>CPP interface for Crazyflie Nano Quadcopter from Bitcraze</description>
+  <description>CPP interface for Crazyflie Nano Quadcopter from Bitcraze with modification for SITL/HITL</description>
+  <description>CPP interface for Crazyflie Nano Quadcopter from Bitcraze </description>
 
   <maintainer email="whoenig@usc.edu">Wolfgang Hoenig</maintainer>
+  <maintainer email="frmbouwe@gmail.com">Franck Djeumou</maintainer>
 
   <license>MIT</license>
 
+  <url type="website">https://github.com/wuwushrek/crazyflie_cpp</url>
   <url type="website">http://ros.org/wiki/crazyflie</url>
   <url type="bugtracker">https://github.com/whoenig/crazyflie_ros/issues</url>
 

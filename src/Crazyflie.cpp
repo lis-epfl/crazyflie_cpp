@@ -27,6 +27,92 @@ std::mutex g_crazyflieusbMutex[MAX_USB];
 Logger EmptyLogger;
 
 
+/*************** Additions/Modifications for Simulation ****************/
+Crazyflie::Crazyflie(
+  std::function<void(const uint8_t* , uint32_t)> sendDataFunc,
+  std::function<void(ITransport::Ack &, int64_t)> recvDataFunc,
+  Logger& logger)
+  : m_radio(nullptr)
+  , m_transport(nullptr)
+  , m_devId(0)
+  , m_channel(0)
+  , m_address(0)
+  , m_datarate(Crazyradio::Datarate_250KPS)
+  , m_logTocEntries()
+  , m_logBlockCb()
+  , m_paramTocEntries()
+  , m_paramValues()
+  , m_emptyAckCallback(nullptr)
+  , m_linkQualityCallback(nullptr)
+  , m_consoleCallback(nullptr)
+  , m_logger(logger)
+  , m_log_use_V2(false)
+  , m_param_use_V2(false)
+  , m_isSim(true)
+{
+  m_recvDataCallback = recvDataFunc;
+  m_sendDataCallback = sendDataFunc;
+
+  // enable safelink
+  if (ENABLE_SAFELINK) {
+    const uint8_t enable_safelink[] = {0xFF, 0x05, 0x01};
+    sendPacketOrTimeout(enable_safelink, sizeof(enable_safelink), false);
+  }
+
+  m_curr_up = 0;
+  m_curr_down = 0;
+}
+
+void Crazyflie::sendPing(int64_t timeout)
+{
+  if (m_isSim){
+    ITransport::Ack ack;
+    m_recvDataCallback(ack , timeout);
+    if (ack.ack)
+      handleAck(ack);
+    return;
+  }
+  uint8_t ping = 0xFF;
+  sendPacket(&ping, sizeof(ping));
+}
+
+void Crazyflie::sendPacketNoAck(
+  const uint8_t* data,
+  uint32_t length)
+{
+  if (m_isSim){
+    m_sendDataCallback(data , length);
+  }else {
+    if (m_radio) {
+      std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
+      if (m_radio->getAddress() != m_address) {
+        m_radio->setAddress(m_address);
+      }
+      if (m_radio->getChannel() != m_channel) {
+        m_radio->setChannel(m_channel);
+      }
+      if (m_radio->getDatarate() != m_datarate) {
+        m_radio->setDatarate(m_datarate);
+      }
+      if (!m_radio->getAckEnable()) {
+        m_radio->setAckEnable(true);
+      }
+      m_radio->sendPacketNoAck(data, length);
+    } else {
+      std::unique_lock<std::mutex> mlock(g_crazyflieusbMutex[m_devId]);
+      m_transport->sendPacketNoAck(data, length);
+    }
+  }
+}
+
+bool Crazyflie::isSim()
+{
+  return m_isSim;
+}
+
+/* sendPacket <-> sendPacketNoAck <-> sendExternalPositionUpdate
+/***********************************************************************/
+
 Crazyflie::Crazyflie(
   const std::string& link_uri,
   Logger& logger)
@@ -46,6 +132,7 @@ Crazyflie::Crazyflie(
   , m_log_use_V2(false)
   , m_param_use_V2(false)
   , m_logger(logger)
+  , m_isSim(false)
 {
   int datarate;
   int channel;
@@ -190,13 +277,10 @@ void Crazyflie::sendExternalPositionUpdate(
   float z)
 {
   crtpExternalPositionUpdate position(x, y, z);
-  sendPacket((const uint8_t*)&position, sizeof(position));
-}
-
-void Crazyflie::sendPing()
-{
-  uint8_t ping = 0xFF;
-  sendPacket(&ping, sizeof(ping));
+  if (m_isSim)
+    sendPacketNoAck((const uint8_t*)&position, sizeof(position));
+  else
+    sendPacket((const uint8_t*)&position, sizeof(position));
 }
 
 /**
@@ -962,7 +1046,10 @@ void Crazyflie::sendPacket(
 
   numPackets++;
 
-  if (m_radio) {
+  if (m_isSim){
+    m_sendDataCallback(data, length);
+    m_recvDataCallback(ack, sitl_wait_timeout);
+  }else if (m_radio) {
     std::unique_lock<std::mutex> mlock(g_radioMutex[m_devId]);
     if (m_radio->getAddress() != m_address) {
       m_radio->setAddress(m_address);
@@ -1085,6 +1172,18 @@ void Crazyflie::handleAck(
     crtpPlatformRSSIAck* r = (crtpPlatformRSSIAck*)result.data;
     if (m_emptyAckCallback) {
       m_emptyAckCallback(r);
+    }
+  }
+  else if(crtpMotorsDataResponse::match(result)){
+    crtpMotorsDataResponse* r = (crtpMotorsDataResponse *) result.data;
+    if (m_motorsControlCallback){
+      m_motorsControlCallback(r);
+    }
+  }
+  else if (crtpImuSimDataResponse::match(result)){
+    crtpImuSimDataResponse* r = (crtpImuSimDataResponse *) result.data;
+    if(m_imuSimDataResponseCallback){
+      m_imuSimDataResponseCallback(r);
     }
   }
   else {
