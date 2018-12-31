@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(crazyflie_cpp)
+project(crazyflie_comm)
 
 find_library(USB_LIB usb-1.0)
 
@@ -10,7 +10,7 @@ include_directories(
   include/crazyflie_cpp
 )
 
-add_library(crazyflie_cpp
+add_library(crazyflie_comm
   src/Crazyflie.cpp
   src/CrazyflieUSB.cpp
   src/Crazyradio.cpp
@@ -18,6 +18,6 @@ add_library(crazyflie_cpp
   src/USBDevice.cpp
 )
 
-target_link_libraries(crazyflie_cpp
+target_link_libraries(crazyflie_comm
   ${USB_LIB}
 )

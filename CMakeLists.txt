@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(crazyflie_cpp)
+project(crazyflie_comm)
 
 if(DEFINED CATKIN_DEVEL_PREFIX)
   message("Using ROS (catkin_make)")
