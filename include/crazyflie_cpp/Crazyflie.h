@@ -12,6 +12,7 @@
 #include <chrono>
 
 #define ENABLE_SAFELINK 0
+#define sitl_wait_timeout 1000000
 
 class Logger
 {
@@ -106,9 +107,29 @@ public:
   } __attribute__((packed));
 
 public:
+  /*************** Additions/Modifications for Simulation ****************/
   Crazyflie(
     const std::string& link_uri,
-    Logger& logger = EmptyLogger);
+    Logger& logger = EmptyLogger,
+    std::function<void(const uint8_t* , uint32_t)> sendDataFunc = {},
+    std::function<void(ITransport::Ack&, int64_t)> recvDataFunc = {});
+
+  bool isSITL();
+
+  void sendPacketNoAck(
+    const uint8_t* data,
+    uint32_t length);
+
+  void setMotorsCallback(
+    std::function<void(const crtpMotorsDataResponse*)> cb){
+    m_motorsControlCallback = cb;
+  }
+
+  void setImuSimResponseCallback(
+    std::function<void(const crtpImuSimDataResponse*)> cb){
+    m_imuSimDataResponseCallback = cb;
+  }
+  /***********************************************************************/
 
   void logReset();
 
@@ -144,7 +165,7 @@ public:
     float y,
     float z);
 
-  void sendPing();
+  void sendPing(int64_t timeout_usecs = sitl_wait_timeout);
 
   void reboot();
   // returns new address
@@ -407,6 +428,14 @@ private:
   }
 
 private:
+  /*************** Additions/Modifications for Simulation ****************/
+  bool m_isSITL;
+  std::function<void(const crtpMotorsDataResponse*)> m_motorsControlCallback;
+  std::function<void(const crtpImuSimDataResponse*)> m_imuSimDataResponseCallback;
+  std::function<void(const uint8_t* , uint32_t)> m_sendDataCallback;
+  std::function<void(ITransport::Ack& , int64_t)> m_recvDataCallback;
+  /***********************************************************************/
+
   Crazyradio* m_radio;
   ITransport* m_transport;
   int m_devId;
