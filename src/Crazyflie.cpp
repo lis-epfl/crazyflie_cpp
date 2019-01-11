@@ -31,7 +31,7 @@ Crazyflie::Crazyflie(
   const std::string& link_uri,
   Logger& logger,
   std::function<void(const uint8_t* , uint32_t)> sendDataFunc,
-  std::function<void(Crazyradio::Ack &, int64_t)> recvDataFunc)
+  std::function<void(ITransport::Ack&, int64_t)> recvDataFunc)
   : m_radio(nullptr)
   , m_transport(nullptr)
   , m_devId(0)
@@ -94,10 +94,7 @@ Crazyflie::Crazyflie(
 
     m_radio = g_crazyradios[m_devId];
   }
-  else {
-    success = std::sscanf(link_uri.c_str(), "usb://%d",
-       &m_devId) == 1;
-
+  else if (success = (std::sscanf(link_uri.c_str(), "usb://%d", &m_devId) == 1)) {
     if (m_devId >= MAX_USB) {
       throw std::runtime_error("This version does not support that many CFs over USB. Adjust MAX_USB and recompile!");
     }
@@ -1089,6 +1086,12 @@ void Crazyflie::handleAck(
     // handled in batch system
   }
   else if (crtpLogGetItemResponse::match(result)) {
+    // handled in batch system
+  }
+  else if(crtpLogGetItemV2Response::match(result)) {
+    // handled in batch system
+  }
+  else if(crtpLogGetInfoV2Response::match(result)) {
     // handled in batch system
   }
   else if (crtpLogControlResponse::match(result)) {

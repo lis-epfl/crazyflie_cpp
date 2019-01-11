@@ -358,7 +358,7 @@ private:
     bool crtpMode = true,
     bool useSafeLink = ENABLE_SAFELINK,
     float baseTime = 2.0,
-    float timePerRequest = 0.2);
+    float timePerRequest = 2.0); // Avoid first timeout
 
 
   void handleBatchAck(
