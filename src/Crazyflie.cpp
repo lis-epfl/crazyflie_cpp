@@ -672,7 +672,10 @@ void Crazyflie::requestParamToc(bool forceNoCache)
   startBatchRequest();
   // std::cout << "infoReq" << std::endl;
   addRequest(infoRequest, 1);
-  try {
+  handleRequests();
+  numParam = getRequestResult<crtpParamTocGetInfoV2Response>(0)->numParam;
+  crc = getRequestResult<crtpParamTocGetInfoV2Response>(0)->crc;
+  /*try {
     handleRequests();
     numParam = getRequestResult<crtpParamTocGetInfoV2Response>(0)->numParam;
     crc = getRequestResult<crtpParamTocGetInfoV2Response>(0)->crc;
@@ -686,7 +689,7 @@ void Crazyflie::requestParamToc(bool forceNoCache)
     handleRequests();
     numParam = getRequestResult<crtpParamTocGetInfoResponse>(0)->numParam;
     crc = getRequestResult<crtpParamTocGetInfoResponse>(0)->crc;
-  }
+  }*/
 
   // check if it is in the cache
   std::string fileName = "params" + std::to_string(crc) + ".csv";
