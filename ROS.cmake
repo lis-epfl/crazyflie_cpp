@@ -18,8 +18,6 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 catkin_package(
   # INCLUDE_DIRS include
   LIBRARIES crazyflie_comm
-  CATKIN_DEPENDS
-  DEPENDS ${USB_LIB}
 )
 
 ###########
